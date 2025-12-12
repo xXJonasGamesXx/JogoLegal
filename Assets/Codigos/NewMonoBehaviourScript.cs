@@ -1,63 +1,99 @@
 using UnityEngine;
 
-public class NewMonoBehaviourScript : MonoBehaviour
+public class PlayerMovement : MonoBehaviour
 {
-    private Rigidbody2D rb2d;
+    [Header("Movement Settings")]
     public float moveSpeed = 5f;
-    private  float moveX;
     public float jumpForce = 10f;
 
-    public Transform groundCheck;
-    public LayerMask groundLayer;
+    [Header("Ground Detection")]
+    public Transform groundCheck;      // O objeto vazio nos pés
+    public float groundCheckRadius = 0.2f;
+    public LayerMask groundLayer;      // A layer do chão (MUITO IMPORTANTE)
 
+    private Rigidbody2D rb;
     private bool isGrounded;
 
-    public Transform visual;
+    [Header("Visuals")]
+    public Transform visual;           // O objeto filho com o Sprite/Animator
     private Animator anim;
+    private Vector3 originalScale;     // Para salvar o tamanho original
 
-
-    // Start is called once before the first execution of Update after the MonoBehaviour is created
     void Start()
     {
-        rb2d = this.GetComponent<Rigidbody2D>();
+        rb = GetComponent<Rigidbody2D>();
+        
+        // Proteção caso esqueça de arrastar o visual
+        if (visual == null) visual = transform; 
+        
         anim = visual.GetComponent<Animator>();
+
+        // Salva o tamanho que você configurou no Inspector ao dar Play
+        originalScale = visual.localScale;
     }
 
-    // Update is called once per frame
     void Update()
     {
-        moveX = Input.GetAxisRaw("Horizontal");
+        // 1. Verificar se está no chão
+        isGrounded = Physics2D.OverlapCircle(groundCheck.position, groundCheckRadius, groundLayer);
+        
+        // Atualiza a animação
+        if (anim != null)
+            anim.SetBool("IsGrounded", isGrounded);
 
-        isGrounded = Physics2D.OverlapCircle(groundCheck.position, 0.1f, groundLayer);
+        // 2. Movimento Horizontal
+        float moveInput = Input.GetAxisRaw("Horizontal");
 
-        if  (Input.GetButtonDown("Jump") && isGrounded)
+        // Nota: Se der erro em 'linearVelocity', troque por 'velocity' (versões antigas da Unity)
+        rb.linearVelocity = new Vector2(moveInput * moveSpeed, rb.linearVelocity.y);
+
+        // 3. Animação de Correr e Virar o Personagem
+        if (anim != null)
+            anim.SetBool("isRunning", Mathf.Abs(moveInput) > 0f && isGrounded);
+
+        // Lógica de virar usando o tamanho original salvo
+        if (moveInput > 0.01f)
         {
-            Jump();
+            // Olha para a direita (escala original positiva)
+            visual.localScale = new Vector3(Mathf.Abs(originalScale.x), originalScale.y, originalScale.z);
+        }
+        else if(moveInput < -0.01f)
+        {
+            // Olha para a esquerda (inverte o X)
+            visual.localScale = new Vector3(-Mathf.Abs(originalScale.x), originalScale.y, originalScale.z);
         }
 
-        anim.SetBool("IsRunning", Mathf.Abs(moveX) > 0f && isGrounded);
-        if (moveX > 0.01f)
+        // 4. Pulo
+        if (Input.GetKeyDown(KeyCode.UpArrow) && isGrounded)
         {
-            visual.localScale = new Vector3(12, 12, 2);
-        }
-        else if (moveX < -0.01f)
-        {
-            visual.localScale = new Vector3(-12, 12, 2);
+            if (anim != null) anim.SetTrigger("Jump");
+            rb.linearVelocity = new Vector2(rb.linearVelocity.x, jumpForce);
         }
 
-     Move();
+        // 5. Combate
+        bool isFighting = Input.GetKey(KeyCode.LeftShift) && isGrounded;
+        if (anim != null) 
+            anim.SetBool("isFightPose", isFighting);
+
+        if (isFighting)
+        {
+            // Para o personagem enquanto luta
+            rb.linearVelocity = new Vector2(0, rb.linearVelocity.y); // Mantém a gravidade (y), zera o (x)
+
+            if (Input.GetKeyDown(KeyCode.Z))
+            {
+                if (anim != null) anim.SetTrigger("Punch");
+            }
+        }
     }
 
-    void Move()
+    // DESENHA O CÍRCULO VERMELHO NA TELA DE SCENE PARA AJUDAR
+    void OnDrawGizmosSelected()
     {
-        rb2d.linearVelocity = new  Vector2(moveX * moveSpeed, rb2d.linearVelocity.y);
-    }
-
-    void Jump()
-    {
-    rb2d.linearVelocity = new Vector2(rb2d.linearVelocity.x, jumpForce);
+        if (groundCheck != null)
+        {
+            Gizmos.color = Color.red;
+            Gizmos.DrawWireSphere(groundCheck.position, groundCheckRadius);
+        }
     }
 }
-        
-        
-
